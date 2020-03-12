@@ -2,15 +2,17 @@ import os
 import gc
 import pickle
 import numpy as np
+from keras import regularizers
 from keras.models import Sequential
+from keras.models import load_model
+from keras.models import Model
 from keras.layers import LSTM
 from keras.layers import Dense
 from keras.layers import TimeDistributed
 from keras.layers import Bidirectional
 from keras.layers import BatchNormalization
 from keras.layers import Dropout
-from keras import regularizers
-from keras.models import Model
+
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder
 from sklearn import metrics 
@@ -24,16 +26,17 @@ def bi_lstm(nclasses):
 	model.add(BatchNormalization(input_shape=(10, 128)))
 	model.add(Dropout(0.5))
 	model.add((LSTM(64, activation='relu',
-	        kernel_regularizer=regularizers.l2(0.01),
-	        activity_regularizer=regularizers.l2(0.01),
-	        return_sequences=True)))
+	        # kernel_regularizer=regularizers.l2(0.01),
+	        # activity_regularizer=regularizers.l2(0.01),
+	        return_sequences = True)))
 
 	model.add(BatchNormalization())
 	model.add(Dropout(0.5))
 
 	model.add((LSTM(64, activation='relu',
-	        kernel_regularizer=regularizers.l2(0.01),
-	        activity_regularizer=regularizers.l2(0.01))))
+	        # kernel_regularizer=regularizers.l2(0.01),
+	        # activity_regularizer=regularizers.l2(0.01),
+	        return_sequences = False)))
 
 	model.add(Dense(nclasses, activation='softmax'))
 
@@ -47,8 +50,12 @@ def bi_lstm(nclasses):
 def train_model(classes, X_train, X_test, y_train, y_test):
 	print("Classes = {}".format(classes))
 	print("# Classes = {}".format(len(classes)))
-	model = bi_lstm(len(classes))
-	model.fit(X_train, y_train, validation_data = (X_test, y_test), epochs = 10, batch_size = 32)
+	try:
+		model = load_model('saved/bilstm_model.h5')
+	except:
+		model = bi_lstm(len(classes))
+		model.fit(X_train, y_train, validation_data = (X_test, y_test), epochs = 15, batch_size = 64)
+		model.save('saved/bilstm_model.h5')
 	return model
 
 
@@ -101,7 +108,7 @@ def make_test_data(classes):
 
 
 def test_using_labels(model, test_data):
-	print('Testing Using Labels')
+	print('\n\nTesting Using Labels')
 	for clas in test_data:
 		print('\n', clas, ':')
 		print("M_ID\tAUC\tpAUC")
@@ -112,7 +119,8 @@ def test_using_labels(model, test_data):
 			y_pred = model.predict(test_feats)
 			y_pred_labels = np.argmax(y_pred, axis = 1)
 			y_true = np.array(test_data[clas][ids]['y'])
-			pred_anom = [y_pred[i][y_pred_labels[i]] if y_pred_labels[i] == y_true[i] else (1 - y_pred[i][y_pred_labels[i]]) for i in range(len(y_true))]
+			pred_anom = [(1 - y_pred[i][y_pred_labels[i]]) if y_pred_labels[i] == y_true[i] \
+															else (y_pred[i][y_pred_labels[i]]) for i in range(len(y_true))]
 			real_anom = test_data[clas][ids]['anomaly']
 			
 			auc = metrics.roc_auc_score(real_anom, pred_anom)
@@ -164,7 +172,7 @@ def test_using_similarity(model, test_data):
 		print("AVG\t%.2f\t%.2f"%(avg_auc*100, avg_pauc*100))
 
 if __name__ == '__main__':
-	classes = ['slider', 'valve']
+	classes = ['slider', 'valve', 'pump', 'fan', 'ToyCar']
 	X_train, X_test, y_train, y_test = make_train_data(classes)
 	model = train_model(classes, X_train, X_test, y_train, y_test)
 	test_data = make_test_data(classes)
