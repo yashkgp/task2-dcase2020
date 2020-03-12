@@ -24,14 +24,14 @@ onehot_encoder = OneHotEncoder(sparse = False)
 def bi_lstm(nclasses):
 	model = Sequential()
 	model.add(BatchNormalization(input_shape=(10, 128)))
-	model.add(Dropout(0.5))
+	# model.add(Dropout(0.5))
 	model.add((LSTM(64, activation='relu',
 	        # kernel_regularizer=regularizers.l2(0.01),
 	        # activity_regularizer=regularizers.l2(0.01),
 	        return_sequences = True)))
 
 	model.add(BatchNormalization())
-	model.add(Dropout(0.5))
+	# model.add(Dropout(0.5))
 
 	model.add((LSTM(64, activation='relu',
 	        # kernel_regularizer=regularizers.l2(0.01),
@@ -51,8 +51,10 @@ def train_model(classes, X_train, X_test, y_train, y_test):
 	print("Classes = {}".format(classes))
 	print("# Classes = {}".format(len(classes)))
 	try:
+		print('Loading Model')
 		model = load_model('saved/bilstm_model.h5')
 	except:
+		print('Loading Model Failed, Training')
 		model = bi_lstm(len(classes))
 		model.fit(X_train, y_train, validation_data = (X_test, y_test), epochs = 15, batch_size = 64)
 		model.save('saved/bilstm_model.h5')
@@ -65,7 +67,10 @@ def make_train_data(classes):
 		with open(os.path.join('data', clas, 'vggish_embeddings_train'), 'rb') as file:
 			D = pickle.load(file)
 		for file in D:
-			train_data['X'].append(np.array(D[file]))
+			if clas == 'ToyCar':
+				train_data['X'].append(np.array(D[file][:-1]))
+			else:	
+				train_data['X'].append(np.array(D[file]))
 			train_data['y'].append([classes.index(clas)])
 	X_train, X_test, y_train, y_test = train_test_split(train_data['X'], train_data['y'], test_size=0.25, random_state=42)
 	del train_data
@@ -98,7 +103,10 @@ def make_test_data(classes):
 		for file in test_dict:
 			temp = file.split('_')
 			ID = temp[2]
-			result[clas][ID]['X'].append(np.array(test_dict[file]))
+			if clas == 'ToyCar':
+				result[clas][ID]['X'].append(np.array(test_dict[file][:-1]))
+			else:
+				result[clas][ID]['X'].append(np.array(test_dict[file]))
 			result[clas][ID]['y'].append([classes.index(clas)])
 			if file.split('_')[0] == 'anomaly':
 				result[clas][ID]['anomaly'].append(1)
@@ -138,7 +146,10 @@ def calculate_centroid(clas, intermediate_layer_model):
 		train_dict = pickle.load(file)
 	centroid = []
 	for file in train_dict:
-		emb = intermediate_layer_model.predict(np.array([train_dict[file]]))
+		if clas == 'ToyCar':
+			emb = intermediate_layer_model.predict(np.array([train_dict[file][:-1]]))
+		else:
+			emb = intermediate_layer_model.predict(np.array([train_dict[file]]))
 		centroid.append(emb)
 	return np.mean(centroid, axis = 0)
 
@@ -150,11 +161,11 @@ def test_using_similarity(model, test_data):
 	print('\n\nTesting Using Similarity')
 
 	for clas in test_data:
+		centroid = calculate_centroid(clas, intermediate_layer_model)
 		print('\n', clas, ':')
 		print("M_ID\tAUC\tpAUC")
 		avg_auc = []
 		avg_pauc = []
-		centroid = calculate_centroid(clas, intermediate_layer_model)
 		for ids in test_data[clas]:
 			test_feats = np.array(test_data[clas][ids]['X'])
 			y_pred = intermediate_layer_model.predict(test_feats)
@@ -172,7 +183,7 @@ def test_using_similarity(model, test_data):
 		print("AVG\t%.2f\t%.2f"%(avg_auc*100, avg_pauc*100))
 
 if __name__ == '__main__':
-	classes = ['slider', 'valve', 'pump', 'fan', 'ToyCar']
+	classes = ['slider', 'valve', 'pump', 'fan', 'ToyCar', 'ToyConveyor']
 	X_train, X_test, y_train, y_test = make_train_data(classes)
 	model = train_model(classes, X_train, X_test, y_train, y_test)
 	test_data = make_test_data(classes)
