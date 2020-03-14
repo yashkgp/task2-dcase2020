@@ -14,8 +14,10 @@ def calculate_centroid(train_dict):
 	centroid = []
 	for file in train_dict:
 		emb = train_dict[file]
+		# centroid.append(emb)
 		centroid.append(np.mean(emb, axis = 0))
-	return np.mean(centroid, axis = 0)
+	centroid = np.mean(centroid, axis = 0)
+	return centroid
 
 def calculate_similarity(centroid, test_dict):
 	
@@ -38,8 +40,10 @@ def calculate_similarity(centroid, test_dict):
 		temp = file.split('_')
 		ID = temp[2]
 		emb = test_dict[file]
-		distance = spatial.distance.cosine(centroid, np.mean(emb, axis = 0))
-
+		emb = np.mean(emb, axis = 0)
+		# distance = [np.abs(spatial.distance.cityblock(centroid[i], emb[i])) for i in range((centroid.shape[0]))]
+		# distance = np.sum(distance)
+		distance = spatial.distance.cosine(centroid, emb)
 		if temp[0] == 'normal':
 			normal_dist.append(distance)
 			try:
