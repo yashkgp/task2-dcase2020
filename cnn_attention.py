@@ -4,6 +4,8 @@ import tqdm
 import pickle
 import librosa
 import numpy as np 
+from keras.models import Model
+from keras.layers import Input, Conv2D, MaxPooling2D, UpSampling2D
 
 frames = 41
 window_size = 512 * (frames - 1)
@@ -85,26 +87,62 @@ def test_using_cum_mae(model, test_data, clas):
     print("M_ID\tAUC\tpAUC")
     avg_auc = []
     avg_pauc = []
+    predicted = {}
     for mid in test_data:
+        evaluate[mid] = {'pred':[], 'real':[]}
         for clip_id in test_data[mid]:
             isanomaly = clip_id.split('_')[1]
             test_feats = test_data[mid][clip_id]
             y_pred = [model.predict(i) for i in test_feats]
             ####DEFINE MAE FOR IMAGE#############
-            # mae = [mean_absolute_error(test_feats[i], y_pred[i]) for i in range(len(test_feats))]
+            mae = [mean_absolute_error(test_feats[i], y_pred[i]) for i in range(len(test_feats))]
+            evaluate[mid]['pred'].append(np.sum(mae))
             real_anom = 1 if isanomaly == 'anomaly' else 0
-            auc = metrics.roc_auc_score(real_anom, mae)
-            p_auc = metrics.roc_auc_score(real_anom, mae, max_fpr = 0.1)
-            print("%d\t%.2f\t%.2f"%(int(ids), auc*100, p_auc*100))
-            avg_auc.append(auc)
-            avg_pauc.append(p_auc)
+            evaluate[mid]['real'].append(real_anom)
+        auc = metrics.roc_auc_score(evaluate[mid]['real'], evaluate[mid]['pred'])
+        p_auc = metrics.roc_auc_score(evaluate[mid]['real'], evaluate[mid]['pred'], max_fpr = 0.1)
+        print("%d\t%.2f\t%.2f"%(int(ids), auc*100, p_auc*100))
+        avg_auc.append(auc)
+        avg_pauc.append(p_auc)
     avg_auc = np.mean(avg_auc)
     avg_pauc = np.mean(avg_pauc)
     print("AVG\t%.2f\t%.2f"%(avg_auc*100, avg_pauc*100))
 
-def train_model(clas, train_data):
-    # Define and train model
-    return None
+
+def autoencoder_model():
+
+    input_img = Input(shape=(60, 41, 2))
+
+    x = Conv2D(24, (5, 5), activation='relu', strides = (1, 1), padding='same')(input_img)
+    x = MaxPooling2D((4, 2), strides = (4, 2), padding='same')(x)
+    x = Conv2D(48, (5, 5), strides = (1, 1),activation='relu', padding='same')(x)
+    x = MaxPooling2D((4, 2), strides = (4, 2), padding='same')(x)
+    x = Conv2D(48, (5, 5), strides = (1, 1), activation='relu', padding='same')(x)
+    encoded = MaxPooling2D((4, 2), strides = (4, 2), padding='same')(x)
+
+    x = Conv2D(48, (5, 5), strides = (1, 1), activation='relu', padding='same')(encoded)
+    x = UpSampling2D((1, 1))(x)
+    x = Conv2D(48, (5, 5), strides = (1, 1),activation='relu', padding='same')(x)
+    x = UpSampling2D((1, 1))(x)
+    x = Conv2D(24, (5, 5), activation='relu', strides = (1, 1), padding='same')(input_img)
+    x = UpSampling2D((1, 1))(x)
+    decoded = Conv2D(2, (5, 5), activation='sigmoid', padding='same')(x)
+
+    autoencoder = Model(input_img, decoded)
+    autoencoder.compile(optimizer='adam', loss='mae')
+
+    return autoencoder
+
+
+def train_model(train_data):
+    try:
+        print('Loading Model')
+        autoencoder = load_model('saved/cnn_autoen.h5')
+    except:
+        autoencoder = autoencoder_model()
+        autoencoder.fit(train_data['X'], train_data['X'], epochs = 50, batch_size = 128, shuffle = True, validation_data=(train_data['X'], train_data['X']))
+        autoencoder.save('saved/cnn_autoen.h5')
+    return autoencoder
 
 if __name__ == '__main__':
     
@@ -119,5 +157,5 @@ if __name__ == '__main__':
     for clas in classes:
         test_data = make_test_data(clas)
         train_data = make_train_data(clas)
-        model = train_model(clas, train_data)
+        model = train_model(train_data)
         test_using_cum_mae(model, test_data, clas)
