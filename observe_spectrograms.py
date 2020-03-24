@@ -36,7 +36,6 @@ def plotter(x, isanom):
     # Plot signal
     plt.figure()
     ama.plot_signal(x, fs, isanom)
-    plt.savefig('../'+isanom+'signal.png')
     
     # Power in Time Domain
     # Energy of the signal
@@ -60,7 +59,6 @@ def plotter(x, isanom):
     power_psd_rfft_x_rw = f_step * sum(psd_rfft_r['PSD'])[0]
     plt.figure()
     ama.plot_psd_data(psd_rfft_r)
-    plt.savefig('../'+isanom+'psd_rfft_r.png')
     
     # Power using its PSD from rFFT
     psd_rfft_b = ama.rfft_psd(x, fs, win_function = 'blackmanharris')
@@ -68,7 +66,6 @@ def plotter(x, isanom):
     power_psd_rfft_x_bh = f_step * sum(psd_rfft_r['PSD'])[0]
     plt.figure()
     ama.plot_psd_data(psd_rfft_b)
-    plt.savefig('../'+isanom+'psd_rfft_b.png')
     
     # Power from STFFT Spectrogram (Hamming window)
     w_size =  1 * fs
@@ -77,7 +74,6 @@ def plotter(x, isanom):
     power_spect_h = sum(sum(rfft_spect_h['power_spectrogram']))[0] * rfft_spect_h['freq_delta'] * rfft_spect_h['time_delta']
     plt.figure()
     ama.plot_spectrogram_data(rfft_spect_h)
-    plt.savefig('../'+isanom+'rfft_spect_h.png')
     
     # Power from STFFT Spectrogram (Rectangular window)
     w_size =  1 * fs
