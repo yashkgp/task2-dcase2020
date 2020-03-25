@@ -88,7 +88,7 @@ def test_using_cum_mae(model, test_data, clas):
     print("M_ID\tAUC\tpAUC")
     avg_auc = []
     avg_pauc = []
-    predicted = {}
+    evaluate = {}
     for mid in test_data:
         evaluate[mid] = {'pred':[], 'real':[]}
         for clip_id in test_data[mid]:
@@ -139,9 +139,10 @@ def train_model(train_data):
     try:
         print('Loading Model')
         autoencoder = load_model('saved/cnn_autoen.h5')
+        print('Model Loaded')
     except:
         autoencoder = autoencoder_model()
-        autoencoder.fit(train_data['X'], train_data['X'], epochs = 50, batch_size = 128, shuffle = True, validation_data=(train_data['X'], train_data['X']))
+        autoencoder.fit(train_data['X'], train_data['X'], epochs = 2, batch_size = 64, shuffle = True, validation_data=(train_data['X'], train_data['X']))
         autoencoder.save('saved/cnn_autoen.h5')
     return autoencoder
 
