@@ -99,9 +99,9 @@ def test_using_cum_mse(model, test_data, clas):
             isanomaly = clip_id.split('_')[1]
             test_feats = test_data[mid][clip_id]
             if torch.cuda.is_available() == True:
-                y_pred = [model(torch.tensor([i.T]).cuda()) for i in test_feats]
+                y_pred = [model(Variable(torch.tensor([i.T])).cuda()) for i in test_feats]
             else:
-                y_pred = [model(torch.tensor([i.T])) for i in test_feats]
+                y_pred = [model(Variable(torch.tensor([i.T]))) for i in test_feats]
             ####DEFINE MAE FOR IMAGE#############
             mae = [criterion(y_pred[i][0], torch.tensor(test_feats[i].T)).data for i in range(len(test_feats))]
             evaluate[mid]['pred'].append(np.sum(mae))
