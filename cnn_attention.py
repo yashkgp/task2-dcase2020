@@ -203,6 +203,8 @@ def train_model(train_data, clas):
     try:
         model.load_state_dict(torch.load('saved/'+clas+'_conv_autoencoder.pth'))
         model.eval()
+        if torch.cuda.is_available() == True:
+            model = model.cuda()
         return model
     except:
         for epoch in range(num_epochs):
