@@ -201,10 +201,12 @@ def train_model(train_data, clas):
     optimizer = torch.optim.Adam(model.parameters(), lr = learning_rate, weight_decay = 1e-5)
 
     try:
-        model.load_state_dict(torch.load('saved/'+clas+'_conv_autoencoder.pth'))
-        model.eval()
         if torch.cuda.is_available() == True:
+            model.load_state_dict(torch.load('saved/'+clas+'_conv_autoencoder.pth', map_location = 'cuda:0'))
             model = model.cuda()
+        else:
+            model.load_state_dict(torch.load('saved/'+clas+'_conv_autoencoder.pth'))
+        model.eval()
         return model
     except:
         for epoch in range(num_epochs):
