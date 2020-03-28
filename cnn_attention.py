@@ -7,7 +7,7 @@ import numpy as np
 import torch
 from torch.autograd import Variable
 from torch import nn
-from sklearn.metrics import mean_absolute_error
+from sklearn import preprocessing
 from sklearn.metrics import roc_auc_score
 
 
@@ -15,10 +15,10 @@ frames = 41
 window_size = 512 * (frames - 1)
 
 def windows(data, window_size):
-	start = 0
-	while start < len(data):
-		yield start, start + window_size
-		start += int(window_size / 2)
+    start = 0
+    while start < len(data):
+        yield start, start + window_size
+        start += int(window_size / 2)
 
 def make_train_data(clas):
     try:
@@ -87,7 +87,7 @@ def make_test_data(clas):
 
 def test_using_cum_mse(model, test_data, clas):
     print('\n\nTesting Reconstruction MSE Loss')
-    criterion = nn.MSELoss()
+    criterion = nn.L1Loss()
     print('\n', clas, ':')
     print("M_ID\tAUC\tpAUC")
     avg_auc = []
@@ -99,30 +99,22 @@ def test_using_cum_mse(model, test_data, clas):
             isanomaly = clip_id.split('_')[1]
             test_feats = test_data[mid][clip_id]
             if torch.cuda.is_available() == True:
-                y_pred = [model(Variable(torch.tensor([i.T])).cuda()) for i in test_feats]
+                y_pred = [model(Variable(torch.tensor([scale(i.T)])).cuda()) for i in test_feats]
                 mae = [(criterion(y_pred[i][0], torch.tensor(test_feats[i].T).cuda()).data).cpu() for i in range(len(test_feats))]
             else:
-                y_pred = [model(Variable(torch.tensor([i.T]))) for i in test_feats]
+                y_pred = [model(Variable(torch.tensor([scale(i.T)]))) for i in test_feats]
                 mae = [criterion(y_pred[i][0], torch.tensor(test_feats[i].T)).data for i in range(len(test_feats))]
             evaluate[mid]['pred'].append(np.sum(mae))
             real_anom = 1 if isanomaly == 'anomaly' else 0
             evaluate[mid]['real'].append(real_anom)
         auc = roc_auc_score(evaluate[mid]['real'], evaluate[mid]['pred'])
         p_auc = roc_auc_score(evaluate[mid]['real'], evaluate[mid]['pred'], max_fpr = 0.1)
-        print("%d\t%.2f\t%.2f"%(int(ids), auc*100, p_auc*100))
+        print("%d\t%.2f\t%.2f"%(int(mid), auc*100, p_auc*100))
         avg_auc.append(auc)
         avg_pauc.append(p_auc)
     avg_auc = np.mean(avg_auc)
     avg_pauc = np.mean(avg_pauc)
     print("AVG\t%.2f\t%.2f"%(avg_auc*100, avg_pauc*100))
-
-    # for mid in test_data:
-    #     evaluate[mid] = {'pred':[], 'real':[]}
-    #     for clip_id in test_data[mid]:
-    #         isanomaly = clip_id.split('_')[1]
-    #         real_anom = 1 if isanomaly == 'anomaly' else 0
-    #         evaluate[mid]['real'].append(real_anom)
-
 
 
 
@@ -130,27 +122,27 @@ class autoencoder(nn.Module):
     def __init__(self):
         super(autoencoder, self).__init__()
         self.encoder = nn.Sequential(
-            nn.Conv2d(2, 12, 5, stride = 1, padding = 3),  
+            nn.Conv2d(2, 24, 5, stride = 1, padding = 3),  
             nn.ReLU(True),
             nn.MaxPool2d((4,2), stride = (4,2)),  
-            nn.Conv2d(12, 24, 5, stride = 1, padding = 3),  
+            nn.Conv2d(24, 48, 5, stride = 1, padding = 3),  
             nn.ReLU(True),
             nn.MaxPool2d((4,2), stride = (4,2)),
-            nn.Conv2d(24, 24, 5, stride = 1, padding = 3),  
+            nn.Conv2d(48, 48, 5, stride = 1, padding = 3),  
             nn.ReLU(True),
             nn.MaxPool2d((4,2), stride = (4,2))
         )
         self.decoder = nn.Sequential(
-            nn.Conv2d(24, 24, 5, stride = 1, padding = 2),  
+            nn.Conv2d(48, 48, 5, stride = 1, padding = 2),  
             nn.ReLU(True),
-            nn.Upsample(size = (3, 16), mode = "nearest"),
-            nn.Conv2d(24, 24, 5, stride = 1, padding = 1),  
+            nn.Upsample(size = (3, 16), mode = "bilinear"),
+            nn.Conv2d(48, 48, 5, stride = 1, padding = 1),  
             nn.ReLU(True),
-            nn.Upsample((10, 31), mode = "nearest"),
-            nn.Conv2d(24, 12, 5, stride = 1, padding = 0),
+            nn.Upsample((10, 31), mode = "bilinear"),
+            nn.Conv2d(48, 24, 5, stride = 1, padding = 0),
             nn.ReLU(True),
-            nn.Upsample((41, 60), mode = "nearest"),
-            nn.Conv2d(12, 2, 5, stride = 1, padding = 2),
+            nn.Upsample((41, 60), mode = "bilinear"),
+            nn.Conv2d(24, 2, 5, stride = 1, padding = 2),
             nn.ReLU(True)
         )
 
@@ -184,6 +176,12 @@ class autoencoder(nn.Module):
 
 #     return autoencoder
 
+def scale(img):
+    for i in range(len(img)):
+        rmin = np.min(img[i])
+        rmax = np.max(img[i])
+        img[i] = ((img[i] - rmin)/(rmax - rmin)) * 255
+    return img
 
 
 def train_model(train_data, clas):
@@ -197,7 +195,7 @@ def train_model(train_data, clas):
     else:
         model = autoencoder()
 
-    criterion = nn.MSELoss()
+    criterion = nn.L1Loss()
     optimizer = torch.optim.Adam(model.parameters(), lr = learning_rate, weight_decay = 1e-5)
 
     try:
@@ -215,6 +213,7 @@ def train_model(train_data, clas):
             batch = []
             for data in tqdm.tqdm(train_data['X']):
                 img = data.T
+                img = scale(img)
                 if bs < batch_size:
                     batch.append(img)
                     bs += 1
@@ -225,10 +224,10 @@ def train_model(train_data, clas):
                     else:
                         batch = Variable(torch.tensor(batch))
                     # ===================forward=====================
+                    optimizer.zero_grad()
                     output = model(batch)
                     loss = criterion(output, batch)
                     # ===================backward====================
-                    optimizer.zero_grad()
                     loss.backward()
                     optimizer.step()
                     batch = []
@@ -242,14 +241,14 @@ def train_model(train_data, clas):
                 else:
                     batch = Variable(torch.tensor(batch))
                 # ===================forward=====================
+                optimizer.zero_grad()
                 output = model(batch)
                 loss = criterion(output, batch)
                 # ===================backward====================
-                optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
             # ===================log========================
-            print('epoch [{}/{}], loss:{:.4f}'.format(epoch+1, num_epochs, loss.data))
+            print('epoch [{}/{}], loss:{:.4f}'.format(epoch+1, num_epochs, loss.item()))
 
         torch.save(model.state_dict(), 'saved/'+clas+'_conv_autoencoder.pth')
         return model
